@@ -504,8 +504,7 @@ const MainFeature = ({ toast }) => {
           ))}
         </div>
       </div>
-      </div>}
-      {/* Add/Edit Task Modal */}
+      
       <AnimatePresence>
         {isAddingTask && (
           <>
@@ -666,6 +665,7 @@ const MainFeature = ({ toast }) => {
           </>
         )}
       </AnimatePresence>
+      </div>}
     </div>
   );
 };

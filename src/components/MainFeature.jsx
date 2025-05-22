@@ -111,7 +111,8 @@ const MainFeature = ({ toast }) => {
     }
 
     setLoadingAction('saving');
-    
+
+    try {
       const labelArray = newTask.labels.split(',').map(label => label.trim()).filter(Boolean);
       
       if (editingTaskId) {

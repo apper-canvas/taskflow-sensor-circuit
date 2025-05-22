@@ -40,7 +40,6 @@ const MainFeature = ({ toast }) => {
     labels: ''
   });
   
-  const [isAddingTask, setIsAddingTask] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -113,7 +112,6 @@ const MainFeature = ({ toast }) => {
 
     setLoadingAction('saving');
     
-    try {
       const labelArray = newTask.labels.split(',').map(label => label.trim()).filter(Boolean);
       
       if (editingTaskId) {
@@ -178,7 +176,6 @@ const MainFeature = ({ toast }) => {
       toast.error(editingTaskId ? "Failed to update task: " : "Failed to create task: " + error.message);
     } finally {
       setLoadingAction('');
-      setIsAddingTask(false);
       setNewTask({
         title: '',
         description: '',
@@ -202,7 +199,6 @@ const MainFeature = ({ toast }) => {
         labels: taskToEdit.labels.join(', ')
       });
       setEditingTaskId(taskId);
-      setIsAddingTask(true);
     }
   };
   
@@ -296,6 +292,139 @@ const MainFeature = ({ toast }) => {
   return (
     <div className="w-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <h2 className="text-xl font-semibold">
+          {editingTaskId ? "Edit Task" : "Add New Task"}
+        </h2>
+      </div>
+      
+      {/* Task Form - Now at the top of the screen */}
+      <div className="bg-white dark:bg-surface-800 p-6 rounded-xl shadow-md mb-6">
+        <form onSubmit={handleAddTask} className="space-y-4">
+          <div>
+            <label htmlFor="title" className="block text-sm font-medium mb-1">Task Title <span className="text-red-500">*</span></label>
+            <input
+              id="title"
+              type="text"
+              name="title"
+              value={newTask.title}
+              onChange={handleInputChange}
+              placeholder="Enter task title"
+              className="input"
+              required
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium mb-1">Description</label>
+            <textarea
+              id="description"
+              name="description"
+              value={newTask.description}
+              onChange={handleInputChange}
+              placeholder="Enter task description"
+              className="input min-h-[100px]"
+              rows={3}
+            />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium mb-1">Status</label>
+              <select
+                id="status"
+                name="status"
+                value={newTask.status}
+                onChange={handleInputChange}
+                className="input"
+              >
+                {STATUSES.map(status => (
+                  <option key={status.value} value={status.value}>{status.label}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="priority" className="block text-sm font-medium mb-1">Priority</label>
+              <select
+                id="priority"
+                name="priority"
+                value={newTask.priority}
+                onChange={handleInputChange}
+                className="input"
+              >
+                {PRIORITIES.map(priority => (
+                  <option key={priority.value} value={priority.value}>{priority.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <label htmlFor="dueDate" className="block text-sm font-medium mb-1">Due Date</label>
+            <input
+              id="dueDate"
+              type="date"
+              name="dueDate"
+              value={newTask.dueDate}
+              onChange={handleInputChange}
+              className="input"
+              min={new Date().toISOString().slice(0, 10)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="labels" className="block text-sm font-medium mb-1">Labels</label>
+            <input
+              id="labels"
+              type="text"
+              name="labels"
+              value={newTask.labels}
+              onChange={handleInputChange}
+              placeholder="Enter labels separated by commas"
+              className="input"
+            />
+            <p className="mt-1 text-xs text-surface-500">Separate labels with commas (e.g., design, urgent, feature)</p>
+          </div>
+          
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingTaskId(null);
+                setNewTask({
+                  title: '',
+                  description: '',
+                  status: 'not-started',
+                  priority: 'medium',
+                  dueDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+                  labels: ''
+                });
+              }}
+              className="btn btn-outline"
+              disabled={loadingAction === 'saving'}
+            >
+              {editingTaskId ? "Cancel Edit" : "Clear Form"}
+            </button>
+            
+            <motion.button
+              whileHover={{ scale: loadingAction === 'saving' ? 1 : 1.02 }}
+              whileTap={{ scale: loadingAction === 'saving' ? 1 : 0.98 }}
+              type="submit"
+              className="btn btn-primary"
+              disabled={loadingAction === 'saving'}
+            >
+              {loadingAction === 'saving' ? (
+                <div className="flex items-center">
+                  <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-white rounded-full mr-2"></div>
+                  {editingTaskId ? "Updating..." : "Saving..."}
+                </div>
+              ) : (editingTaskId ? "Update Task" : "Add Task")}
+            </motion.button>
+          </div>
+        </form>
+      </div>
+      
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div className="w-full md:w-auto">
           <div className="relative">
             <input
@@ -337,11 +466,11 @@ const MainFeature = ({ toast }) => {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => setIsAddingTask(true)}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="btn btn-primary flex items-center justify-center gap-2 ml-auto"
           >
             <ApperIcon name="Plus" size={18} />
-            <span>Add Task</span>
+            <span>New Task</span>
           </motion.button>
         </div>
       </div>
@@ -505,166 +634,6 @@ const MainFeature = ({ toast }) => {
         </div>
       </div>)}
 
-      <AnimatePresence>
-        {isAddingTask && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-              onClick={() => setIsAddingTask(false)}
-            />
-            
-            <motion.div
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 50 }}
-              className="fixed bottom-0 left-0 right-0 md:top-1/2 md:left-1/2 md:right-auto md:bottom-auto md:transform md:-translate-x-1/2 md:-translate-y-1/2 bg-white dark:bg-surface-800 p-6 rounded-t-2xl md:rounded-2xl shadow-xl z-50 max-w-lg w-full mx-auto"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">
-                  {editingTaskId ? "Edit Task" : "Add New Task"}
-                </h2>
-                <button 
-                  onClick={() => {
-                    setIsAddingTask(false);
-                    setEditingTaskId(null);
-                    setNewTask({
-                      title: '',
-                      description: '',
-                      status: 'not-started',
-                      priority: 'medium',
-                      dueDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-                      labels: ''
-                    });
-                  }}
-                  className="p-1 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-full"
-                >
-                  <ApperIcon name="X" size={20} />
-                </button>
-              </div>
-              
-              <form onSubmit={handleAddTask} className="space-y-4">
-                <div>
-                  <label htmlFor="title" className="block text-sm font-medium mb-1">Task Title <span className="text-red-500">*</span></label>
-                  <input
-                    id="title"
-                    type="text"
-                    name="title"
-                    value={newTask.title}
-                    onChange={handleInputChange}
-                    placeholder="Enter task title"
-                    className="input"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium mb-1">Description</label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={newTask.description}
-                    onChange={handleInputChange}
-                    placeholder="Enter task description"
-                    className="input min-h-[100px]"
-                    rows={3}
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="status" className="block text-sm font-medium mb-1">Status</label>
-                    <select
-                      id="status"
-                      name="status"
-                      value={newTask.status}
-                      onChange={handleInputChange}
-                      className="input"
-                    >
-                      {STATUSES.map(status => (
-                        <option key={status.value} value={status.value}>{status.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="priority" className="block text-sm font-medium mb-1">Priority</label>
-                    <select
-                      id="priority"
-                      name="priority"
-                      value={newTask.priority}
-                      onChange={handleInputChange}
-                      className="input"
-                    >
-                      {PRIORITIES.map(priority => (
-                        <option key={priority.value} value={priority.value}>{priority.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                
-                <div>
-                  <label htmlFor="dueDate" className="block text-sm font-medium mb-1">Due Date</label>
-                  <input
-                    id="dueDate"
-                    type="date"
-                    name="dueDate"
-                    value={newTask.dueDate}
-                    onChange={handleInputChange}
-                    className="input"
-                    min={new Date().toISOString().slice(0, 10)}
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="labels" className="block text-sm font-medium mb-1">Labels</label>
-                  <input
-                    id="labels"
-                    type="text"
-                    name="labels"
-                    value={newTask.labels}
-                    onChange={handleInputChange}
-                    placeholder="Enter labels separated by commas"
-                    className="input"
-                  />
-                  <p className="mt-1 text-xs text-surface-500">Separate labels with commas (e.g., design, urgent, feature)</p>
-                </div>
-                
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingTask(false);
-                      setEditingTaskId(null);
-                    }}
-                    className="btn btn-outline"
-                    disabled={loadingAction === 'saving'}
-                  >
-                    Cancel
-                  </button>
-                  
-                  <motion.button
-                    whileHover={{ scale: loadingAction === 'saving' ? 1 : 1.02 }}
-                    whileTap={{ scale: loadingAction === 'saving' ? 1 : 0.98 }}
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={loadingAction === 'saving'}
-                  >
-                    {loadingAction === 'saving' ? (
-                      <div className="flex items-center">
-                        <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-white rounded-full mr-2"></div>
-                        {editingTaskId ? "Updating..." : "Saving..."}
-                      </div>
-                    ) : (editingTaskId ? "Update Task" : "Add Task")}
-                  </motion.button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

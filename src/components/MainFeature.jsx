@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import ApperIcon from './ApperIcon';
+import { useSelector } from 'react-redux';
+import { getTasks, createTask, updateTask, deleteTask, updateTaskStatus } from '../services/taskService';
+import { getLabels, createLabels } from '../services/labelService';
+import { getTaskLabels, createTaskLabel, deleteAllLabelsForTask } from '../services/taskLabelService';
+
 
 const PRIORITIES = [
   { value: 'low', label: 'Low', color: 'bg-green-500' },
@@ -18,31 +23,13 @@ const STATUSES = [
 ];
 
 const MainFeature = ({ toast }) => {
-  const [tasks, setTasks] = useState(() => {
-    const savedTasks = localStorage.getItem('tasks');
-    return savedTasks ? JSON.parse(savedTasks) : [
-      {
-        id: '1',
-        title: 'Create project plan',
-        description: 'Outline the project scope, timeline, and deliverables',
-        status: 'in-progress',
-        priority: 'high',
-        dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), // 3 days from now
-        createdAt: new Date().toISOString(),
-        labels: ['planning', 'documentation']
-      },
-      {
-        id: '2',
-        title: 'Design UI mockups',
-        description: 'Create initial designs for the dashboard interface',
-        status: 'not-started',
-        priority: 'medium',
-        dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), // 5 days from now
-        createdAt: new Date().toISOString(),
-        labels: ['design', 'ui/ux']
-      }
-    ];
-  });
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState('');
+  const [labels, setLabels] = useState([]);
+  const [taskLabels, setTaskLabels] = useState([]);
+  
+  const user = useSelector((state) => state.user.user);
   
   const [newTask, setNewTask] = useState({
     title: '',
@@ -59,10 +46,54 @@ const MainFeature = ({ toast }) => {
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Save tasks to localStorage whenever they change
+  // Fetch tasks, labels, and task-labels when component mounts
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch tasks with current filters
+        const filters = {};
+        if (filterStatus !== 'all') filters.status = filterStatus;
+        if (filterPriority !== 'all') filters.priority = filterPriority;
+        if (searchQuery) filters.searchQuery = searchQuery;
+        
+        const [tasksData, labelsData, taskLabelsData] = await Promise.all([
+          getTasks(filters),
+          getLabels(),
+          getTaskLabels()
+        ]);
+        
+        // Process tasks to include label information
+        const processedTasks = tasksData.map(task => {
+          // Extract labels from Tags field and format them as needed
+          const taskTags = task.Tags ? task.Tags.split(',') : [];
+          
+          return {
+            id: task.Id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            dueDate: task.dueDate,
+            createdAt: task.CreatedOn,
+            updatedAt: task.updatedAt,
+            completedAt: task.completedAt,
+            labels: taskTags
+          };
+        });
+        
+        setTasks(processedTasks);
+        setLabels(labelsData);
+        setTaskLabels(taskLabelsData);
+      } catch (error) {
+        toast.error("Error loading tasks: " + error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [filterStatus, filterPriority, searchQuery, toast]);
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -72,45 +103,91 @@ const MainFeature = ({ toast }) => {
     }));
   };
   
-  const handleAddTask = (e) => {
+  const handleAddTask = async (e) => {
     e.preventDefault();
     
     if (!newTask.title.trim()) {
       toast.error("Task title is required!");
       return;
     }
+
+    setLoadingAction('saving');
     
-    const taskToAdd = {
-      id: editingTaskId || Date.now().toString(),
-      title: newTask.title.trim(),
-      description: newTask.description.trim(),
-      status: newTask.status,
-      priority: newTask.priority,
-      dueDate: new Date(newTask.dueDate).toISOString(),
-      createdAt: editingTaskId ? tasks.find(t => t.id === editingTaskId).createdAt : new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      labels: newTask.labels.split(',').map(label => label.trim()).filter(Boolean)
-    };
-    
-    if (editingTaskId) {
-      setTasks(tasks.map(task => task.id === editingTaskId ? taskToAdd : task));
-      toast.success("Task updated successfully!");
-      setEditingTaskId(null);
-    } else {
-      setTasks([...tasks, taskToAdd]);
-      toast.success("Task added successfully!");
+    try {
+      const labelArray = newTask.labels.split(',').map(label => label.trim()).filter(Boolean);
+      
+      if (editingTaskId) {
+        // Update existing task
+        const updatedTask = await updateTask(editingTaskId, {
+          title: newTask.title.trim(),
+          description: newTask.description.trim(),
+          status: newTask.status,
+          priority: newTask.priority,
+          dueDate: new Date(newTask.dueDate).toISOString(),
+          labels: labelArray
+        });
+        
+        // Update local state
+        setTasks(tasks.map(task => 
+          task.id === editingTaskId 
+            ? {
+                id: updatedTask.Id,
+                title: updatedTask.title,
+                description: updatedTask.description,
+                status: updatedTask.status,
+                priority: updatedTask.priority,
+                dueDate: updatedTask.dueDate,
+                createdAt: updatedTask.CreatedOn,
+                updatedAt: updatedTask.updatedAt,
+                completedAt: updatedTask.completedAt,
+                labels: labelArray
+              } 
+            : task
+        ));
+        
+        toast.success("Task updated successfully!");
+        setEditingTaskId(null);
+      } else {
+        // Create new task
+        const createdTask = await createTask({
+          title: newTask.title.trim(),
+          description: newTask.description.trim(),
+          status: newTask.status,
+          priority: newTask.priority,
+          dueDate: new Date(newTask.dueDate).toISOString(),
+          labels: labelArray
+        });
+        
+        // Add to local state
+        setTasks([...tasks, {
+          id: createdTask.Id,
+          title: createdTask.title,
+          description: createdTask.description,
+          status: createdTask.status,
+          priority: createdTask.priority,
+          dueDate: createdTask.dueDate,
+          createdAt: createdTask.CreatedOn,
+          updatedAt: createdTask.updatedAt,
+          completedAt: createdTask.completedAt,
+          labels: labelArray
+        }]);
+        
+        toast.success("Task added successfully!");
+      }
+    } catch (error) {
+      toast.error(editingTaskId ? "Failed to update task: " : "Failed to create task: " + error.message);
+    } finally {
+      setLoadingAction('');
+      setIsAddingTask(false);
+      setNewTask({
+        title: '',
+        description: '',
+        status: 'not-started',
+        priority: 'medium',
+        dueDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+        labels: ''
+      });
     }
-    
-    setNewTask({
-      title: '',
-      description: '',
-      status: 'not-started',
-      priority: 'medium',
-      dueDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-      labels: ''
-    });
-    
-    setIsAddingTask(false);
   };
   
   const handleEditTask = (taskId) => {
@@ -129,34 +206,57 @@ const MainFeature = ({ toast }) => {
     }
   };
   
-  const handleDeleteTask = (taskId) => {
-    if (confirm('Are you sure you want to delete this task?')) {
+  const handleDeleteTask = async (taskId) => {
+    if (!confirm('Are you sure you want to delete this task?')) {
+      return;
+    }
+    
+    setLoadingAction(`deleting-${taskId}`);
+    
+    try {
+      await deleteTask(taskId);
       setTasks(tasks.filter(task => task.id !== taskId));
       toast.success("Task deleted successfully!");
+    } catch (error) {
+      toast.error("Failed to delete task: " + error.message);
+    } finally {
+      setLoadingAction('');
     }
   };
   
-  const handleChangeStatus = (taskId, newStatus) => {
-    setTasks(tasks.map(task => {
-      if (task.id === taskId) {
-        const updatedTask = { 
-          ...task, 
-          status: newStatus,
-          updatedAt: new Date().toISOString()
-        };
-        
-        // If status is changed to completed, set completedAt
-        if (newStatus === 'completed' && task.status !== 'completed') {
-          updatedTask.completedAt = new Date().toISOString();
-        } else if (newStatus !== 'completed') {
-          delete updatedTask.completedAt;
+  const handleChangeStatus = async (taskId, newStatus) => {
+    setLoadingAction(`status-${taskId}`);
+    
+    try {
+      const updatedTask = await updateTaskStatus(taskId, newStatus);
+      
+      // Update local state
+      setTasks(tasks.map(task => {
+        if (task.id === taskId) {
+          const updatedTaskData = { 
+            ...task, 
+            status: newStatus,
+            updatedAt: new Date().toISOString()
+          };
+          
+          // If status is changed to completed, set completedAt
+          if (newStatus === 'completed' && task.status !== 'completed') {
+            updatedTaskData.completedAt = new Date().toISOString();
+          } else if (newStatus !== 'completed') {
+            delete updatedTaskData.completedAt;
+          }
+          
+          return updatedTaskData;
         }
-        
-        return updatedTask;
-      }
-      return task;
-    }));
-    toast.info(`Task status updated to ${STATUSES.find(s => s.value === newStatus)?.label}`);
+        return task;
+      }));
+      
+      toast.info(`Task status updated to ${STATUSES.find(s => s.value === newStatus)?.label}`);
+    } catch (error) {
+      toast.error("Failed to update task status: " + error.message);
+    } finally {
+      setLoadingAction('');
+    }
   };
   
   const filteredTasks = tasks.filter(task => {
@@ -246,6 +346,13 @@ const MainFeature = ({ toast }) => {
         </div>
       </div>
       
+      {/* Loading indicator */}
+      {loading && (
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      )}
+      
       {/* Task Count Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {STATUSES.map(status => (
@@ -274,7 +381,7 @@ const MainFeature = ({ toast }) => {
       </div>
       
       {/* Kanban Board View */}
-      <div className="overflow-x-auto pb-4">
+      {!loading && <div className="overflow-x-auto pb-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-w-[768px]">
           {STATUSES.map(status => (
             <div key={status.value} className="flex flex-col h-full">
@@ -307,14 +414,24 @@ const MainFeature = ({ toast }) => {
                               <button 
                                 onClick={() => handleEditTask(task.id)}
                                 className="p-1 hover:bg-surface-100 dark:hover:bg-surface-700 rounded"
+                                disabled={loadingAction.startsWith('editing-')}
                               >
-                                <ApperIcon name="Edit2" size={14} className="text-surface-500" />
+                                {loadingAction === `editing-${task.id}` ? (
+                                  <div className="animate-spin h-3 w-3 border-2 border-t-transparent border-primary rounded-full"></div>
+                                ) : (
+                                  <ApperIcon name="Edit2" size={14} className="text-surface-500" />
+                                )}
                               </button>
                               <button 
                                 onClick={() => handleDeleteTask(task.id)}
                                 className="p-1 hover:bg-surface-100 dark:hover:bg-surface-700 rounded"
+                                disabled={loadingAction === `deleting-${task.id}`}
                               >
-                                <ApperIcon name="Trash2" size={14} className="text-surface-500" />
+                                {loadingAction === `deleting-${task.id}` ? (
+                                  <div className="animate-spin h-3 w-3 border-2 border-t-transparent border-primary rounded-full"></div>
+                                ) : (
+                                  <ApperIcon name="Trash2" size={14} className="text-surface-500" />
+                                )}
                               </button>
                             </div>
                           </div>
@@ -359,8 +476,16 @@ const MainFeature = ({ toast }) => {
                                 key={s.value}
                                 onClick={() => handleChangeStatus(task.id, s.value)}
                                 className="text-xs px-2 py-1 rounded bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 transition-colors"
+                                disabled={loadingAction === `status-${task.id}`}
                               >
-                                Move to {s.label}
+                                {loadingAction === `status-${task.id}` ? (
+                                  <div className="flex items-center">
+                                    <div className="animate-spin h-3 w-3 border-2 border-t-transparent border-primary rounded-full mr-1"></div>
+                                    Moving...
+                                  </div>
+                                ) : (
+                                  <>Move to {s.label}</>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -379,7 +504,7 @@ const MainFeature = ({ toast }) => {
           ))}
         </div>
       </div>
-      
+      </div>}
       {/* Add/Edit Task Modal */}
       <AnimatePresence>
         {isAddingTask && (
@@ -516,17 +641,24 @@ const MainFeature = ({ toast }) => {
                       setEditingTaskId(null);
                     }}
                     className="btn btn-outline"
+                    disabled={loadingAction === 'saving'}
                   >
                     Cancel
                   </button>
                   
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ scale: loadingAction === 'saving' ? 1 : 1.02 }}
+                    whileTap={{ scale: loadingAction === 'saving' ? 1 : 0.98 }}
                     type="submit"
                     className="btn btn-primary"
+                    disabled={loadingAction === 'saving'}
                   >
-                    {editingTaskId ? "Update Task" : "Add Task"}
+                    {loadingAction === 'saving' ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-white rounded-full mr-2"></div>
+                        {editingTaskId ? "Updating..." : "Saving..."}
+                      </div>
+                    ) : (editingTaskId ? "Update Task" : "Add Task")}
                   </motion.button>
                 </div>
               </form>

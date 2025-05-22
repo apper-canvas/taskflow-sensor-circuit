@@ -381,7 +381,7 @@ const MainFeature = ({ toast }) => {
       </div>
       
       {/* Kanban Board View */}
-      {!loading && <div className="overflow-x-auto pb-4">
+      {!loading && (<div className="overflow-x-auto pb-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-w-[768px]">
           {STATUSES.map(status => (
             <div key={status.value} className="flex flex-col h-full">
@@ -503,8 +503,8 @@ const MainFeature = ({ toast }) => {
             </div>
           ))}
         </div>
-      </div>
-      
+      </div>)}
+
       <AnimatePresence>
         {isAddingTask && (
           <>
@@ -665,7 +665,6 @@ const MainFeature = ({ toast }) => {
           </>
         )}
       </AnimatePresence>
-      </div>}
     </div>
   );
 };
